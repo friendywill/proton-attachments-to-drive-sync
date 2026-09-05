@@ -51,13 +51,23 @@ Both bootstrap steps below hand full account credentials to a container. Keep
 Proton Mail Bridge cannot complete a first login headlessly.
 
 ```bash
+docker compose build bridge
 docker compose up -d bridge
-docker compose exec bridge bridge --cli
+docker compose exec bridge protonmail-bridge --cli
 ```
 
-In the bridge CLI: `login`, then `info` to print the IMAP username and the
-bridge-generated password. Those go in `.env` — they are not your Proton
-account password.
+In the bridge CLI: `login`, then `info` to print the IMAP username, the
+bridge-generated password and the port and connection mode in use. Those
+credentials go in `.env` — they are not your Proton account password.
+
+Restart the bridge afterwards (`docker compose restart bridge`) so the
+long-running process picks the account up.
+
+`bridge/Dockerfile` adds `libfido2-1` to the base image. Bridge updates itself
+into its volume, and builds from 3.20 onwards need that library; without it the
+updated binary exits with `libfido2.so.1: cannot open shared object file` and
+the IMAP port answers connections but never sends a greeting, which surfaces in
+the app as `imaplib.IMAP4.abort: socket error: EOF`.
 
 ### 2. rclone remote (one time, interactive)
 

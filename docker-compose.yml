@@ -1,6 +1,7 @@
 services:
   bridge:
-    image: shenxn/protonmail-bridge:latest
+    # Base image plus libfido2, which bridge needs after it self-updates.
+    build: ./bridge
     container_name: proton-bridge
     restart: unless-stopped
     volumes:
