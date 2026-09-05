@@ -1,0 +1,18 @@
+[workspace]
+authors = ["friendywill <will@friendy.dev>"]
+channels = ["conda-forge"]
+name = "proton-attachments-to-drive-sync"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+test = "pytest"
+lint = "ruff check src tests"
+fmt = "ruff format src tests"
+
+[dependencies]
+python = "3.12.*"
+pip = "*"
+
+[pypi-dependencies]
+proton-sync = { path = ".", editable = true, extras = ["dev"] }

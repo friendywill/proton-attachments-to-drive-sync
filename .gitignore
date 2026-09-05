@@ -1,0 +1,13 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# secrets and runtime state
+.env
+config/rclone/
+logs/
+
+# python
+__pycache__/
+*.egg-info/
+.pytest_cache/
