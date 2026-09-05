@@ -1,0 +1,35 @@
+services:
+  bridge:
+    image: shenxn/protonmail-bridge:latest
+    container_name: proton-bridge
+    restart: unless-stopped
+    volumes:
+      - bridge-data:/root
+    # IMAP stays on the internal compose network; nothing is published to the host.
+    expose:
+      - "143"
+
+  app:
+    build: .
+    container_name: proton-sync
+    restart: unless-stopped
+    depends_on:
+      - bridge
+    env_file:
+      - .env
+    environment:
+      IMAP_HOST: bridge
+      IMAP_PORT: "143"
+      STATE_DB_PATH: /data/state.sqlite3
+      LOG_DIR: /logs
+      RCLONE_CONFIG_PATH: /config/rclone/rclone.conf
+    volumes:
+      - state-data:/data
+      - ./logs:/logs
+      - ./config/rclone:/config/rclone
+      # Read-only view of the bridge volume, for its TLS certificate.
+      - bridge-data:/bridge:ro
+
+volumes:
+  bridge-data:
+  state-data:
