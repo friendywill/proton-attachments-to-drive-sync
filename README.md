@@ -71,6 +71,14 @@ the app as `imaplib.IMAP4.abort: socket error: EOF`.
 
 ### 2. rclone remote (one time, interactive)
 
+If you require 2FA:
+
+  1. ensure the `.env` file is ready,
+  2. run the config command as shown below,
+  3. when entering the TOTP code, ensure the code has just been refreshed, and;
+  4. quickly run `docker compose up -d`, so the TOTP does not expire.
+     This will not need to be done again.
+
 ```bash
 docker compose run --rm \
   -v ./config/rclone:/config/rclone \
