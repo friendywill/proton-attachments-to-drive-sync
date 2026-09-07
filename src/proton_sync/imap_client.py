@@ -11,15 +11,64 @@ from __future__ import annotations
 
 import imaplib
 import logging
+import re
 import ssl
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Self, cast, final
 
 logger = logging.getLogger(__name__)
 
+_LIST_LINE = re.compile(
+    r"""
+    ^\( (?P<attributes>[^)]*) \)        # (\HasNoChildren \Junk)
+    \s+ (?: "(?P<delimiter>[^"]*)" | NIL )
+    \s+ (?:                             # a name is quoted (Proton's contain
+      " (?P<quoted>(?:[^"\\]|\\.)*) "   # spaces) or, rarely, a bare atom
+      | (?P<atom>\S+)
+    ) \s*$
+    """,
+    re.VERBOSE,
+)
+
 
 class ImapError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class Mailbox:
+    """A mailbox as the server advertises it in a LIST reply.
+
+    `name` is kept exactly as the server spelled it (modified UTF-7 included)
+    because it is what SELECT has to be given back.
+    """
+
+    name: str
+    attributes: frozenset[str]
+
+    def has_attribute(self, attribute: str) -> bool:
+        return attribute.lower() in self.attributes
+
+
+def parse_list_line(line: bytes) -> Mailbox | None:
+    """Turn one raw LIST reply line into a Mailbox, or None if unparsable."""
+    match = _LIST_LINE.match(line.decode("ascii", errors="replace").strip())
+    if match is None:
+        # Literal-form names ({12}\r\n...) arrive as tuples and are handled by
+        # the caller; anything else reaching here is a server quirk.
+        logger.warning("could not parse LIST reply line: %r", line)
+        return None
+
+    quoted = match.group("quoted")
+    if quoted is not None:
+        name = quoted.replace('\\"', '"').replace("\\\\", "\\")
+    else:
+        name = cast("str", match.group("atom"))
+    attributes = frozenset(
+        attribute.lower() for attribute in match.group("attributes").split()
+    )
+    return Mailbox(name=name, attributes=attributes)
 
 
 def _build_ssl_context(cert_path: str | None) -> ssl.SSLContext:
@@ -95,6 +144,31 @@ class ReadOnlyImapClient:
         if self._conn is None:
             raise ImapError("IMAP client used outside of its context manager")
         return self._conn
+
+    def list_mailboxes(self) -> list[Mailbox]:
+        """Every mailbox the bridge exposes, with its LIST attributes."""
+        status, data = self._connection.list()
+        if status != "OK":
+            raise ImapError(f"LIST failed: {status}")
+
+        mailboxes: list[Mailbox] = []
+        for item in cast("list[object]", data):
+            if isinstance(item, tuple):
+                # Literal form: (b'(\\attrs) "/" {n}', b'name'). Re-quote the
+                # name so the line parses like the inline form.
+                prefix, raw_name = cast("tuple[bytes, bytes]", item[:2])
+                line = (
+                    re.sub(rb"\{\d+\}$", b"", prefix.strip()) + b' "' + raw_name + b'"'
+                )
+            elif isinstance(item, bytes):
+                line = item
+            else:
+                continue
+
+            mailbox = parse_list_line(line)
+            if mailbox is not None:
+                mailboxes.append(mailbox)
+        return mailboxes
 
     def select_readonly(self, mailbox: str) -> int:
         """Open a mailbox read-only and return its UIDVALIDITY."""

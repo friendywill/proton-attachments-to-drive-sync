@@ -40,3 +40,37 @@ tooling.
 
 **Prompt:** "/caveman:compress" → ran on `CLAUDE.md`; original preserved as
 `CLAUDE.original.md`.
+
+## 2026-09-07 — Scan every mailbox, not just INBOX
+
+**Prompt:** "It seems this application only checks my inbox folder, modify the
+code to search all folders, excluding snoozed, deleted, and spam."
+
+**Prompt:** "why is this called list_mailboxes? Tell me that before continueing"
+→ explained the name follows RFC 3501 (`LIST` returns mailboxes) and the
+existing vocabulary in `select_readonly`, `_sync_mailbox` and the
+`mailbox_cursor` table. **Decision:** keep `list_mailboxes`.
+
+**Built:**
+
+- `imap_client.list_mailboxes()` + `parse_list_line()` — issues `LIST` and
+  parses the reply into `Mailbox(name, attributes)`, keeping the server's
+  spelling of the name because `SELECT` needs it back verbatim.
+- `selecting_mailboxes_to_sync.py` — filters that list into `SyncTarget`s and
+  decides which mailbox is the sent one (`\Sent` attribute, else
+  `SENT_FOLDER_NAME`).
+- `sync_service.run_once()` loops over the selected mailboxes; an `ImapError`
+  on one is logged and the pass continues with the rest.
+- `EXCLUDED_MAILBOXES` env var, defaulting to `Snoozed,Trash,Spam,Drafts,All
+  Mail,Starred`.
+
+**Decisions taken:**
+
+| Question | Answer |
+|---|---|
+| Beyond the three requested exclusions | Also skip `All Mail`, `Starred` and `Labels/*` — duplicate listings of mail already scanned in its own folder; scanning them refetches the account every minute |
+| Drafts | Excluded by default: unsent mail, and the attachment reappears under a new Message-ID once sent. Overridable |
+| Custom folders | `Folders/*` scanned; `\Noselect` containers skipped |
+
+**Verification:** `pixi run lint` clean, `pixi run test` 18 passed,
+`basedpyright` 0 errors.

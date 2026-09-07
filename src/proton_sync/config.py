@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+from .selecting_mailboxes_to_sync import DEFAULT_EXCLUDED_MAILBOXES
+
 _ = load_dotenv()
 
 
@@ -15,6 +17,14 @@ def _require(name: str) -> str:
     if not value:
         raise RuntimeError(f"missing required environment variable: {name}")
     return value
+
+
+def _excluded_mailboxes() -> tuple[str, ...]:
+    """Mailbox names to skip, comma-separated, overriding the defaults."""
+    raw = os.environ.get("EXCLUDED_MAILBOXES")
+    if raw is None:
+        return DEFAULT_EXCLUDED_MAILBOXES
+    return tuple(name.strip() for name in raw.split(",") if name.strip())
 
 
 @dataclass(frozen=True)
@@ -26,6 +36,7 @@ class Settings:
     imap_cert_path: str | None
 
     sent_folder_name: str
+    excluded_mailboxes: tuple[str, ...]
     poll_interval_seconds: int
 
     state_db_path: str
@@ -46,6 +57,7 @@ class Settings:
             imap_password=_require("IMAP_PASSWORD"),
             imap_cert_path=os.environ.get("IMAP_CERT_PATH") or None,
             sent_folder_name=os.environ.get("SENT_FOLDER_NAME", "Sent"),
+            excluded_mailboxes=_excluded_mailboxes(),
             poll_interval_seconds=int(os.environ.get("POLL_INTERVAL_SECONDS", "60")),
             state_db_path=os.environ.get("STATE_DB_PATH", "/data/state.sqlite3"),
             drive_remote_name=os.environ.get("DRIVE_REMOTE_NAME", "protondrive"),

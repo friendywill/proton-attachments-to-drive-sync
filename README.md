@@ -22,10 +22,24 @@ Messages with no attachments are recorded as seen and otherwise ignored.
 | `bridge` | Proton Mail Bridge. Exposes Proton Mail as local IMAP. |
 | `app` | Python sync loop. Reads IMAP, uploads via `rclone`. |
 
-Every 60 seconds the app scans `INBOX` and `Sent` for UIDs above the last one
-it processed, parses attachments out of each new message, and uploads them with
-`rclone copyto`. Processed Message-IDs are recorded in SQLite, so a rescan
-never re-uploads.
+Every 60 seconds the app asks the bridge for its mailbox list and scans each one
+for UIDs above the last one it processed, parses attachments out of each new
+message, and uploads them with `rclone copyto`. Processed Message-IDs are
+recorded in SQLite, so a rescan never re-uploads.
+
+Mail found in the mailbox tagged `\Sent` (or named `SENT_FOLDER_NAME`) goes to
+`My Sent Emails/`; everything else is filed under the sender's address.
+
+### Which mailboxes are scanned
+
+`INBOX`, `Archive`, `Sent` and every custom folder under `Folders/`. Skipped by
+default, and overridable with `EXCLUDED_MAILBOXES`:
+
+| Skipped | Why |
+|---|---|
+| `Snoozed`, `Trash`, `Spam` | Requested exclusions. |
+| `Drafts` | Unsent mail; the same attachment arrives again, under a different Message-ID, once the mail is actually sent. |
+| `All Mail`, `Starred`, `Labels/*` | Duplicate listings — a Proton message lives in one folder but carries any number of labels, and `Starred` is a label. Scanning them would refetch the whole account every minute. |
 
 ## Access model — read this before running
 

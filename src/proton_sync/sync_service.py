@@ -9,12 +9,11 @@ from . import message_parser
 from . import naming_proton_drive_paths as drive_paths
 from .config import Settings
 from .drive_uploader import DriveUploader, UploadError
-from .imap_client import ReadOnlyImapClient
+from .imap_client import ImapError, ReadOnlyImapClient
+from .selecting_mailboxes_to_sync import select_targets
 from .state_store import StateStore
 
 logger = logging.getLogger(__name__)
-
-INBOX = "INBOX"
 
 
 @final
@@ -38,8 +37,22 @@ class SyncService:
             password=self._settings.imap_password,
             cert_path=self._settings.imap_cert_path,
         ) as client:
-            self._sync_mailbox(client, INBOX, sent=False)
-            self._sync_mailbox(client, self._settings.sent_folder_name, sent=True)
+            targets = select_targets(
+                client.list_mailboxes(),
+                excluded_names=self._settings.excluded_mailboxes,
+                sent_mailbox_name=self._settings.sent_folder_name,
+            )
+            logger.info(
+                "scanning %d mailbox(es): %s",
+                len(targets),
+                ", ".join(target.mailbox for target in targets),
+            )
+            for target in targets:
+                try:
+                    self._sync_mailbox(client, target.mailbox, sent=target.sent)
+                except ImapError:
+                    # One unreadable mailbox must not stop the rest of the pass.
+                    logger.exception("skipping mailbox %s this pass", target.mailbox)
 
     def _sync_mailbox(
         self, client: ReadOnlyImapClient, mailbox: str, sent: bool
